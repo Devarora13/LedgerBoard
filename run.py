@@ -49,14 +49,15 @@ def main():
         
     # 4. Start Server
     print("[3/3] Starting FastAPI Uvicorn Server...")
+    host = os.environ.get("HOST", "0.0.0.0")
     port = os.environ.get("PORT", "8000")
-    print(f"      Running at: http://127.0.0.1:{port}")
-    print(f"      Swagger Docs: http://127.0.0.1:{port}/docs")
+    print(f"      Running at: http://{host}:{port}")
+    print(f"      Swagger Docs: http://{host}:{port}/docs")
     print("      Press Ctrl+C to stop the server.")
     print("---------------------------------------------------------")
     
     try:
-        subprocess.check_call([uvicorn_path, "main:app", "--host", "127.0.0.1", "--port", port, "--reload"])
+        subprocess.check_call([uvicorn_path, "main:app", "--host", host, "--port", port, "--reload"])
     except KeyboardInterrupt:
         print("\n[SYSTEM] Server stopped by user.")
     except subprocess.CalledProcessError as e:

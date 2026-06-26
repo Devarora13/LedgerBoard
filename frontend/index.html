@@ -31,9 +31,9 @@
                     <i data-lucide="external-link"></i>
                     Interactive Swagger API (/docs)
                 </a>
-                <div class="api-status">
-                    <span class="status-indicator online"></span>
-                    <span class="status-text">Backend Connected</span>
+                <div class="api-status" id="api-status">
+                    <span class="status-indicator" id="status-indicator"></span>
+                    <span class="status-text" id="status-text">Checking...</span>
                 </div>
             </div>
         </div>
@@ -88,7 +88,7 @@
             <div class="ranking-formula-card">
                 <h3><i data-lucide="info"></i> Fair Ranking Formula</h3>
                 <p class="formula-math">Score = (Spent × 0.5) + (log₂ (1 + Count) × 100) + (Active Days × 5)</p>
-                <p class="formula-desc">Resists spamming by using a logarithmic scale for frequency and rewards loyalty with active days.</p>
+                <p class="formula-desc">Resists spamming via logarithmic frequency scaling. Active days count unique server-recorded submission dates.</p>
             </div>
         </section>
 

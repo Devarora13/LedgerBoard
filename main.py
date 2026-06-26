@@ -4,7 +4,7 @@ import time
 from datetime import datetime, timezone, timedelta
 from collections import defaultdict
 from typing import List, Optional
-from fastapi import FastAPI, HTTPException, Request, Depends
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -36,6 +36,7 @@ app.add_middleware(
 rate_limit_store = defaultdict(list)
 RATE_LIMIT_MAX = 5
 RATE_LIMIT_WINDOW = 10  # in seconds
+MAX_TIMESTAMP_AGE_DAYS = 365
 
 # Ensure database is initialized on startup
 @app.on_event("startup")
@@ -58,11 +59,14 @@ class TransactionCreate(BaseModel):
         except ValueError:
             raise ValueError("Timestamp must be in valid ISO 8601 format (e.g., YYYY-MM-DDTHH:MM:SSZ).")
         
-        # Prevent future date manipulation (allowing a 60-second grace period for clock drift)
         now = datetime.now(timezone.utc)
         if ts > now + timedelta(seconds=60):
             raise ValueError("Transaction timestamp cannot be in the future.")
-        
+        if ts < now - timedelta(days=MAX_TIMESTAMP_AGE_DAYS):
+            raise ValueError(
+                f"Transaction timestamp cannot be more than {MAX_TIMESTAMP_AGE_DAYS} days in the past."
+            )
+
         return v
 
 class TransactionResponse(BaseModel):
@@ -90,8 +94,13 @@ class RankingResponse(BaseModel):
 
 # API Endpoints
 
+@app.get("/health")
+async def health_check():
+    return {"status": "ok"}
+
+
 @app.post("/transaction", response_model=TransactionResponse)
-async def create_transaction(tx: TransactionCreate, request: Request):
+async def create_transaction(tx: TransactionCreate):
     # Abuse Prevention: Rate Limiting
     # Limit requests per user_id to prevent transaction spamming
     user_key = f"tx_limit:{tx.userId}"
@@ -132,19 +141,22 @@ async def create_transaction(tx: TransactionCreate, request: Request):
             total_spent = row["total_spent"] or 0.0
             tx_count = row["tx_count"] or 0
 
-            # Calculate active_days dynamically using the unique calendar dates of the user's transactions.
-            # Using SQLite's date() function, which correctly extracts 'YYYY-MM-DD' from ISO-8601 timestamps.
+            # Active days from server recorded time (created_at) to prevent backdating abuse.
             days_row = conn.execute(
-                "SELECT COUNT(DISTINCT date(timestamp)) as active_days FROM transactions WHERE user_id = ?",
+                "SELECT COUNT(DISTINCT date(created_at)) as active_days FROM transactions WHERE user_id = ?",
                 (tx.userId,)
             ).fetchone()
             active_days = days_row["active_days"] or 0
 
-            # Compute the fair ranking score:
+            last_tx_row = conn.execute(
+                "SELECT MAX(timestamp) as last_transaction_time FROM transactions WHERE user_id = ?",
+                (tx.userId,)
+            ).fetchone()
+            last_transaction_time = last_tx_row["last_transaction_time"]
+
             # Score = (Total Spent * 0.5) + (log2(1 + count) * 100) + (active_days * 5)
             score = (total_spent * 0.5) + (math.log2(1 + tx_count) * 100.0) + (active_days * 5.0)
 
-            # 3. Upsert user summaries table
             conn.execute(
                 """
                 INSERT INTO user_summaries (user_id, total_spent, transaction_count, active_days, score, last_transaction_time)
@@ -156,7 +168,7 @@ async def create_transaction(tx: TransactionCreate, request: Request):
                     score = excluded.score,
                     last_transaction_time = excluded.last_transaction_time
                 """,
-                (tx.userId, total_spent, tx_count, active_days, score, tx.timestamp)
+                (tx.userId, total_spent, tx_count, active_days, score, last_transaction_time)
             )
 
             # Commit the transaction block atomically
@@ -173,8 +185,10 @@ async def create_transaction(tx: TransactionCreate, request: Request):
             }
 
         except sqlite3.IntegrityError:
-            # Unique key constraint failed - duplicate transaction ID detected
             conn.rollback()
+            # Duplicate was not processed — do not count it toward the rate limit
+            if rate_limit_store[user_key]:
+                rate_limit_store[user_key].pop()
             raise HTTPException(
                 status_code=409,
                 detail=f"Duplicate transaction: Transaction ID '{tx.transactionId}' has already been processed."
@@ -228,7 +242,9 @@ async def get_ranking(limit: int = 100):
     with get_db() as conn:
         rows = conn.execute(
             """
-            SELECT user_id, total_spent, transaction_count, active_days, score, last_transaction_time
+            SELECT
+                user_id, total_spent, transaction_count, active_days, score, last_transaction_time,
+                (SELECT COUNT(*) FROM user_summaries u2 WHERE u2.score > user_summaries.score) + 1 AS rank
             FROM user_summaries
             ORDER BY score DESC, last_transaction_time ASC
             LIMIT ?
@@ -236,18 +252,18 @@ async def get_ranking(limit: int = 100):
             (limit,)
         ).fetchall()
 
-        rankings = []
-        for i, row in enumerate(rows):
-            rankings.append({
-                "rank": i + 1,
+        return [
+            {
+                "rank": row["rank"],
                 "user_id": row["user_id"],
                 "score": round(row["score"], 2),
                 "total_spent": round(row["total_spent"], 2),
                 "transaction_count": row["transaction_count"],
                 "active_days": row["active_days"],
-                "last_transaction_time": row["last_transaction_time"]
-            })
-        return rankings
+                "last_transaction_time": row["last_transaction_time"],
+            }
+            for row in rows
+        ]
 
 # Serve Frontend static assets
 # Ensure the directory exists or create it before mounting

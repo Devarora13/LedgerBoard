@@ -1,4 +1,5 @@
 import json
+import os
 import urllib.request
 import urllib.error
 import threading
@@ -6,7 +7,7 @@ import uuid
 import time
 from datetime import datetime, timezone
 
-API_BASE = "http://127.0.0.1:8000"
+API_BASE = os.environ.get("API_BASE", "http://127.0.0.1:8000")
 
 def send_transaction(payload):
     url = f"{API_BASE}/transaction"

@@ -26,6 +26,32 @@ const runRateLimitSimBtn = document.getElementById("run-rate-limit-sim");
 
 // Polling interval tracker
 let pollInterval = null;
+let healthInterval = null;
+
+// Health check
+async function checkHealth() {
+    const indicator = document.getElementById("status-indicator");
+    const statusText = document.getElementById("status-text");
+    if (!indicator || !statusText) return;
+
+    try {
+        const res = await fetch(`${API_BASE}/health`);
+        if (res.ok) {
+            indicator.className = "status-indicator online";
+            statusText.textContent = "Backend Connected";
+        } else {
+            throw new Error(`HTTP ${res.status}`);
+        }
+    } catch {
+        indicator.className = "status-indicator offline";
+        statusText.textContent = "Backend Offline";
+    }
+}
+
+function startHealthPolling() {
+    checkHealth();
+    healthInterval = setInterval(checkHealth, 10000);
+}
 
 // Helper: Generate UUID v4
 function generateUUID() {
@@ -399,4 +425,5 @@ window.addEventListener("DOMContentLoaded", () => {
     updateTimestampField();
     fetchLeaderboard();
     startPolling();
+    startHealthPolling();
 });

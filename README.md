@@ -19,11 +19,45 @@ python run.py
 This script will:
 1. Initialize a Python virtual environment (`.venv`).
 2. Upgrade `pip` and install all dependencies from `requirements.txt`.
-3. Launch the FastAPI server at `http://127.0.0.1:8000` with hot-reloading active.
+3. Launch the FastAPI server at `http://0.0.0.0:8000` (accessible locally at `http://127.0.0.1:8000`) with hot-reloading active.
 
 ### Accessing the App
 - **Interactive UI (Frontend)**: Open [http://127.0.0.1:8000/](http://127.0.0.1:8000/) in your browser.
 - **Interactive Swagger Docs**: Open [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs) to test endpoints without Postman.
+- **Health Check**: `GET /health` returns `{"status": "ok"}`.
+
+---
+
+## 🌐 Live Deployment
+
+The app is a single FastAPI service that serves both the API and frontend static files, so one deployment covers everything.
+
+### Option A: Render (recommended)
+
+1. Push this repo to GitHub.
+2. Create a new **Web Service** on [Render](https://render.com).
+3. Connect the repo — Render will detect `render.yaml` automatically.
+4. Deploy. Render sets `PORT` and starts: `uvicorn main:app --host 0.0.0.0 --port $PORT`.
+5. Copy your live URL (e.g. `https://ledgerboard.onrender.com`) into the section below.
+
+### Option B: Docker
+
+```bash
+docker build -t ledgerboard .
+docker run -p 8000:8000 ledgerboard
+```
+
+Open `http://localhost:8000`.
+
+### Live Demo URL
+
+> **Replace this after deploying:** `https://your-app-url.example.com`
+
+### Demo Video
+
+> **Replace this after recording:** [3–5 minute walkthrough video](https://your-video-link.example.com)
+
+Suggested video outline: architecture overview, submit a transaction, leaderboard + summary, run idempotency/concurrency simulators, explain ranking formula and abuse rules.
 
 ---
 
@@ -72,14 +106,20 @@ $$\text{Score} = (\text{Total Spent} \times 0.5) + (\log_2(1 + \text{Transaction
 2. **Frequency (`log2(1 + Transaction Count) * 100`)**:
    Rewards active users, but uses a logarithmic scale to enforce diminishing returns. This prevents users from spamming 10,000 tiny transactions to inflate their score.
 3. **Consistency (`Active Days * 5`)**:
-   Calculated dynamically by counting the number of unique calendar days (`date(timestamp)`) the user transacted. This rewards users who show long-term consistency over those who trigger one-time transaction bursts.
+   Counts unique calendar days from server-recorded `created_at` timestamps (not client `timestamp`). This rewards users who submit transactions on different days while preventing backdating abuse.
+
+`points_awarded` in the transaction response is a display metric (10% of amount, rounded) returned to the client only — it is not stored and does not affect ranking.
+
+### Rank Tie-Breaking
+Both `/ranking` and `/summary` use **competition ranking**: users with the same score share the same rank (e.g. two users at rank 1, next user is rank 3). When scores tie on the leaderboard, users are ordered by earliest `last_transaction_time` (derived from `MAX(timestamp)` per user).
 
 ### Abuse Prevention Rules
 - **Floor Limits**: Transactions under `$0.10` are rejected (prevents micro-spam).
 - **Ceiling Limits**: Transactions over `$10,000.00` are rejected (prevents artificial score bloating).
 - **String Boundaries**: `userId` is capped at 50 characters, and `transactionId` is capped at 100 characters to prevent SQL payload abuse.
 - **Future Dates**: Transactions with timestamps dated more than 60 seconds into the future are rejected.
-- **Rate Limiting**: Users are capped at a maximum of **5 transactions per 10 seconds**. Requests exceeding this return a `429 Too Many Requests` error.
+- **Past Dates**: Timestamps more than 365 days in the past are rejected.
+- **Rate Limiting**: Users are capped at a maximum of **5 transactions per 10 seconds**. Requests exceeding this return a `429 Too Many Requests` error. Duplicate requests (`409`) do not count toward the limit.
 
 ---
 
@@ -102,9 +142,10 @@ conn.execute("BEGIN IMMEDIATE")
 conn.execute("INSERT INTO transactions ...")
 # 2. Recalculate values
 row = conn.execute("SELECT SUM(amount)...")
-active_days = conn.execute("SELECT COUNT(DISTINCT date(timestamp))...")
+active_days = conn.execute("SELECT COUNT(DISTINCT date(created_at))...")
+last_tx = conn.execute("SELECT MAX(timestamp) ...")
 # 3. Write summary
-conn.execute("INSERT OR REPLACE INTO user_summaries ...")
+conn.execute("INSERT ... ON CONFLICT DO UPDATE ...")
 # 4. Commit atomically
 conn.commit()
 ```
@@ -193,3 +234,17 @@ This runs:
 - **Concurrency Test**: Fires 5 unique transaction payloads for the same user concurrently. Verifies that all 5 succeed and that the user's final aggregates are 100% consistent (no lost updates).
 
 The frontend simulator mirrors these same 5-request concurrency checks, and also includes a separate rate-limit test that sends 7 rapid requests to trigger the 5 requests per 10 seconds rule.
+
+---
+
+## 📋 Assumptions & Limitations
+
+| Topic | Decision |
+|-------|----------|
+| **Database** | Single-file SQLite (`app.db`). Suitable for demo/single-instance deploys; not horizontally scaled. |
+| **Rate limiter** | In-memory sliding window per `userId`. Resets on restart; not shared across multiple server workers. |
+| **Active days** | Based on server `created_at`, so consistency reflects when transactions were recorded by this service. |
+| **Client timestamp** | Used for display and `last_transaction_time` (`MAX(timestamp)`); validated to be within ±365 days / +60s of server time. |
+| **Amounts** | Stored as SQLite `REAL` (floating point). Acceptable for this assignment; production would use decimal types. |
+| **Authentication** | None — endpoints are open for demonstration. Rate limits and validation provide basic abuse resistance. |
+| **Idempotent retries** | Duplicate `transactionId` returns `409 Conflict` (not `200` with cached response). Processing is still prevented at the DB layer. |
