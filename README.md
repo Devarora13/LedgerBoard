@@ -4,7 +4,7 @@ A high-performance Python-based transaction ranking service and interactive simu
 
 ### 🎯 Quick Links
 
-- **Live Demo**: [https://ledgerboard-fair-ranking-and-concurrency.onrender.com](https://ledgerboard-fair-ranking-and-concurrency.onrender.com)
+- **Live URL**: [https://ledgerboard-fair-ranking-and-concurrency.onrender.com](https://ledgerboard-fair-ranking-and-concurrency.onrender.com)
 - **Demo Video**: [Watch 5-minute technical walkthrough](https://drive.google.com/file/d/1AuBapk966Vj3XYTG0pJaug-l3-uHimiT/view?usp=sharing)
 
 ---
