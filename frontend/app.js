@@ -35,7 +35,7 @@ async function checkHealth() {
     if (!indicator || !statusText) return;
 
     try {
-        const res = await fetch(`${API_BASE}/health`);
+        const res = await apiFetch(`${API_BASE}/health`);
         if (res.ok) {
             indicator.className = "status-indicator online";
             statusText.textContent = "Backend Connected";
@@ -51,6 +51,30 @@ async function checkHealth() {
 function startHealthPolling() {
     checkHealth();
     healthInterval = setInterval(checkHealth, 10000);
+}
+
+// Fetch helper: bypass browser cache (404s during Render cold start can get cached)
+async function apiFetch(url, options = {}, retries = 3) {
+    const fetchOptions = {
+        ...options,
+        cache: "no-store",
+        headers: {
+            ...(options.headers || {}),
+            "Cache-Control": "no-cache",
+        },
+    };
+
+    for (let attempt = 1; attempt <= retries; attempt++) {
+        const res = await fetch(url, fetchOptions);
+        // Retry transient failures common on Render free tier cold starts
+        if (res.status === 404 || res.status === 502 || res.status === 503) {
+            if (attempt < retries) {
+                await new Promise((r) => setTimeout(r, 1500 * attempt));
+                continue;
+            }
+        }
+        return res;
+    }
 }
 
 // Helper: Generate UUID v4
@@ -84,17 +108,18 @@ function logEvent(type, message) {
 }
 
 // Fetch and render Leaderboard
-async function fetchLeaderboard() {
-    const startTime = Date.now();
+async function fetchLeaderboard({ silent = false } = {}) {
     try {
-        const res = await fetch(`${API_BASE}/ranking`);
+        const res = await apiFetch(`${API_BASE}/ranking`);
         if (!res.ok) throw new Error(`HTTP Error ${res.status}`);
         const data = await res.json();
-        
+
         renderLeaderboard(data);
     } catch (err) {
         console.error("Leaderboard fetch failed", err);
-        logEvent("error", `[API] Failed to fetch leaderboard: ${err.message}`);
+        if (!silent) {
+            logEvent("error", `[API] Failed to fetch leaderboard: ${err.message}`);
+        }
     }
 }
 
@@ -144,7 +169,7 @@ async function fetchUserSummary(userId) {
     if (!userId) return;
     logEvent("sent", `[GET] /summary/${userId} - Fetching stats...`);
     try {
-        const res = await fetch(`${API_BASE}/summary/${userId}`);
+        const res = await apiFetch(`${API_BASE}/summary/${userId}`);
         const data = await res.json();
         
         if (res.ok) {
@@ -182,10 +207,10 @@ async function submitTransaction(e) {
     logEvent("sent", `[POST] /transaction - Payload: ${JSON.stringify(payload)}`);
     
     try {
-        const res = await fetch(`${API_BASE}/transaction`, {
+        const res = await apiFetch(`${API_BASE}/transaction`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload)
+            body: JSON.stringify(payload),
         });
         
         const data = await res.json();
@@ -229,11 +254,11 @@ async function runIdempotencySim() {
     
     const requests = Array.from({ length: 5 }).map((_, index) => {
         const payload = { transactionId: txId, userId, amount, timestamp };
-        return fetch(`${API_BASE}/transaction`, {
+        return apiFetch(`${API_BASE}/transaction`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload)
-        }).then(async res => ({
+            body: JSON.stringify(payload),
+        }).then(async (res) => ({
             index: index + 1,
             status: res.status,
             data: await res.json()
@@ -275,11 +300,11 @@ async function runConcurrencySim() {
         const timestamp = new Date().toISOString();
         const payload = { transactionId: txId, userId, amount, timestamp };
         
-        return fetch(`${API_BASE}/transaction`, {
+        return apiFetch(`${API_BASE}/transaction`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload)
-        }).then(async res => ({
+            body: JSON.stringify(payload),
+        }).then(async (res) => ({
             index: index + 1,
             status: res.status,
             data: await res.json()
@@ -322,11 +347,11 @@ async function runRateLimitSim() {
         
         // Stagger requests by 50ms just to ensure order of logs
         return new Promise(resolve => setTimeout(resolve, index * 50)).then(() => {
-            return fetch(`${API_BASE}/transaction`, {
+            return apiFetch(`${API_BASE}/transaction`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload)
-            }).then(async res => ({
+                body: JSON.stringify(payload),
+            }).then(async (res) => ({
                 index: index + 1,
                 status: res.status,
                 data: await res.json()
@@ -409,7 +434,20 @@ runRateLimitSimBtn.addEventListener("click", runRateLimitSim);
 // Polling helpers
 function startPolling() {
     stopPolling();
-    pollInterval = setInterval(fetchLeaderboard, 3000);
+    pollInterval = setInterval(() => fetchLeaderboard({ silent: true }), 3000);
+}
+
+async function waitForBackendReady(maxAttempts = 10) {
+    for (let i = 1; i <= maxAttempts; i++) {
+        try {
+            const res = await apiFetch(`${API_BASE}/health`, {}, 1);
+            if (res.ok) return true;
+        } catch {
+            // keep retrying
+        }
+        await new Promise((r) => setTimeout(r, 1500));
+    }
+    return false;
 }
 
 function stopPolling() {
@@ -420,10 +458,16 @@ function stopPolling() {
 }
 
 // Page initialization
-window.addEventListener("DOMContentLoaded", () => {
+window.addEventListener("DOMContentLoaded", async () => {
     transactionIdInput.value = generateUUID();
     updateTimestampField();
-    fetchLeaderboard();
-    startPolling();
     startHealthPolling();
+
+    const ready = await waitForBackendReady();
+    if (ready) {
+        await fetchLeaderboard();
+        startPolling();
+    } else {
+        logEvent("error", "[API] Backend is still waking up (Render cold start). Try refreshing in a moment.");
+    }
 });

@@ -4,7 +4,7 @@ import time
 from datetime import datetime, timezone, timedelta
 from collections import defaultdict
 from typing import List, Optional
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -42,6 +42,14 @@ MAX_TIMESTAMP_AGE_DAYS = 365
 @app.on_event("startup")
 def startup_event():
     init_db()
+
+
+@app.middleware("http")
+async def add_no_cache_headers(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith(("/ranking", "/summary", "/health", "/transaction")):
+        response.headers["Cache-Control"] = "no-store"
+    return response
 
 # Pydantic Schemas for Request Validation
 class TransactionCreate(BaseModel):

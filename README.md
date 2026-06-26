@@ -51,7 +51,9 @@ Open `http://localhost:8000`.
 
 ### Live Demo URL
 
-> **Replace this after deploying:** `https://your-app-url.example.com`
+`https://ledgerboard-fair-ranking-and-concurrency.onrender.com`
+
+> **Note:** Render's free tier spins down after ~15 minutes of inactivity. The first request after sleep can take ~30–60 seconds and may briefly return `404`/`503` while the service wakes. The frontend retries automatically; posting a transaction also wakes the server.
 
 ### Demo Video
 
