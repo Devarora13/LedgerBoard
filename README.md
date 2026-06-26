@@ -2,6 +2,11 @@
 
 A high-performance Python-based transaction ranking service and interactive simulation frontend built to demonstrate API design, concurrency handling, database-level idempotency, and abuse-resistant ranking rules.
 
+### 🎯 Quick Links
+
+- **Live Demo**: [https://ledgerboard-fair-ranking-and-concurrency.onrender.com](https://ledgerboard-fair-ranking-and-concurrency.onrender.com)
+- **Demo Video**: [Watch 5-minute technical walkthrough](https://drive.google.com/file/d/1AuBapk966Vj3XYTG0pJaug-l3-uHimiT/view?usp=sharing)
+
 ---
 
 ## ⚡ Quick Start: How to Run
@@ -49,17 +54,7 @@ docker run -p 8000:8000 ledgerboard
 
 Open `http://localhost:8000`.
 
-### Live Demo URL
-
-`https://ledgerboard-fair-ranking-and-concurrency.onrender.com`
-
 > **Note:** Render's free tier spins down after ~15 minutes of inactivity. The first request after sleep can take ~30–60 seconds and may briefly return `404`/`503` while the service wakes. The frontend retries automatically; posting a transaction also wakes the server.
-
-### Demo Video
-
-> **Replace this after recording:** [3–5 minute walkthrough video](https://your-video-link.example.com)
-
-Suggested video outline: architecture overview, submit a transaction, leaderboard + summary, run idempotency/concurrency simulators, explain ranking formula and abuse rules.
 
 ---
 
