@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transaction Fair Ranking System</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="background-decorations">
+        <div class="glow-orb orb-1"></div>
+        <div class="glow-orb orb-2"></div>
+        <div class="glow-orb orb-3"></div>
+    </div>
+
+    <header class="app-header">
+        <div class="header-container">
+            <div class="logo-area">
+                <i data-lucide="shield-check" class="logo-icon"></i>
+                <div class="logo-text">
+                    <h1>LedgerBoard </h1>
+                    <p>Fair Ranking & Concurrency Engine</p>
+                </div>
+            </div>
+            <div class="header-actions">
+                <a href="/docs" target="_blank" class="swagger-link">
+                    <i data-lucide="external-link"></i>
+                    Interactive Swagger API (/docs)
+                </a>
+                <div class="api-status">
+                    <span class="status-indicator online"></span>
+                    <span class="status-text">Backend Connected</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="dashboard-grid">
+        <!-- COLUMN 1: LEADERBOARD -->
+        <section class="dashboard-card leaderboard-card">
+            <div class="card-header">
+                <div class="header-title">
+                    <i data-lucide="trophy" class="card-icon trophy-color"></i>
+                    <h2>Global Leaderboard</h2>
+                </div>
+                <div class="header-controls">
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="auto-refresh-toggle" checked>
+                        <span class="slider"></span>
+                        <span class="toggle-label">Auto-Poll</span>
+                    </label>
+                    <button id="refresh-leaderboard" class="btn-icon" title="Refresh Now">
+                        <i data-lucide="refresh-cw"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <div class="card-body scrollable-body">
+                <div class="leaderboard-table-container">
+                    <table class="leaderboard-table">
+                        <thead>
+                            <tr>
+                                <th>Rank</th>
+                                <th>User ID</th>
+                                <th>Active Days</th>
+                                <th>Spent</th>
+                                <th>Count</th>
+                                <th>Score</th>
+                            </tr>
+                        </thead>
+                        <tbody id="leaderboard-body">
+                            <!-- Injected dynamically by JS -->
+                            <tr>
+                                <td colspan="6" class="table-placeholder">
+                                    <div class="spinner"></div>
+                                    <p>Loading rankings...</p>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <div class="ranking-formula-card">
+                <h3><i data-lucide="info"></i> Fair Ranking Formula</h3>
+                <p class="formula-math">Score = (Spent × 0.5) + (log₂ (1 + Count) × 100) + (Active Days × 5)</p>
+                <p class="formula-desc">Resists spamming by using a logarithmic scale for frequency and rewards loyalty with active days.</p>
+            </div>
+        </section>
+
+        <!-- COLUMN 2: SIMULATOR & TRANSACTION SUBMITTER -->
+        <section class="dashboard-card action-card">
+            <!-- PART A: SINGLE TRANSACTION -->
+            <div class="card-section">
+                <div class="card-header border-bottom">
+                    <div class="header-title">
+                        <i data-lucide="send" class="card-icon send-color"></i>
+                        <h2>Submit Transaction</h2>
+                    </div>
+                </div>
+                
+                <form id="transaction-form" class="card-body flex-form">
+                    <div class="form-group">
+                        <label for="userId">User ID <span class="input-limit">(max 50 chars)</span></label>
+                        <div class="input-wrapper">
+                            <i data-lucide="user" class="input-icon"></i>
+                            <input type="text" id="userId" placeholder="e.g. user_dev" required maxlength="50">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="transactionId">Transaction ID <span class="input-limit">(max 100 chars)</span></label>
+                        <div class="input-row">
+                            <div class="input-wrapper flex-grow">
+                                <i data-lucide="key" class="input-icon"></i>
+                                <input type="text" id="transactionId" placeholder="Unique transaction identifier" required maxlength="100">
+                            </div>
+                            <button type="button" id="generate-tx-id" class="btn btn-secondary">
+                                <i data-lucide="sparkles"></i> UUID
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group half-width">
+                            <label for="amount">Amount ($) <span class="input-limit">(0.10 to 10k)</span></label>
+                            <div class="input-wrapper">
+                                <i data-lucide="dollar-sign" class="input-icon"></i>
+                                <input type="number" id="amount" placeholder="0.00" step="0.01" min="0.10" max="10000.00" required>
+                            </div>
+                        </div>
+                        <div class="form-group half-width">
+                            <label for="timestamp">Timestamp (UTC)</label>
+                            <div class="input-wrapper">
+                                <i data-lucide="calendar" class="input-icon"></i>
+                                <input type="text" id="timestamp" required placeholder="ISO-8601 string">
+                            </div>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary btn-block">
+                        <i data-lucide="check-circle-2"></i> Post Transaction
+                    </button>
+                </form>
+            </div>
+
+            <!-- PART B: CONCURRENCY SIMULATOR -->
+            <div class="card-section border-top">
+                <div class="card-header">
+                    <div class="header-title">
+                        <i data-lucide="zap" class="card-icon zap-color"></i>
+                        <h2>Concurrency & Abuse Simulator</h2>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <p class="section-desc">Test how the API handles simultaneous bursts of traffic. Fires 5 requests instantly in parallel.</p>
+                    
+                    <div class="simulator-controls">
+                        <div class="sim-user-input">
+                            <label for="sim-user-id">Test User ID:</label>
+                            <input type="text" id="sim-user-id" value="concurrent_user_1" class="input-simple">
+                        </div>
+                        
+                        <div class="sim-buttons">
+                            <button id="run-idempotency-sim" class="btn btn-warning flex-grow" title="Fires 5 requests with the EXACT same transactionId to test db-level deduplication">
+                                <i data-lucide="copy"></i> Idempotency Test
+                            </button>
+                            <button id="run-concurrency-sim" class="btn btn-info flex-grow" title="Fires 5 requests with DIFFERENT transactionIds for the same user to test write locks and score updates">
+                                <i data-lucide="shuffle"></i> Concurrent Lock Test
+                            </button>
+                        </div>
+                        
+                        <button id="run-rate-limit-sim" class="btn btn-danger btn-block" title="Fires 7 requests rapidly to trigger the 5 requests / 10 seconds limit">
+                            <i data-lucide="alert-triangle"></i> Rate Limit Abuse Test
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- COLUMN 3: USER SUMMARY & LIVE API LOGS -->
+        <section class="dashboard-grid-column-3">
+            <!-- USER INSPECTOR -->
+            <div class="dashboard-card user-summary-card">
+                <div class="card-header border-bottom">
+                    <div class="header-title">
+                        <i data-lucide="search" class="card-icon search-color"></i>
+                        <h2>User Summary Inspector</h2>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="search-row">
+                        <input type="text" id="search-user-id" placeholder="Enter User ID..." class="input-simple flex-grow">
+                        <button id="search-user-btn" class="btn btn-secondary">Search</button>
+                    </div>
+
+                    <div id="user-summary-details" class="summary-results hidden">
+                        <div class="summary-grid">
+                            <div class="summary-stat">
+                                <span class="stat-label">Rank</span>
+                                <span class="stat-value highlighted" id="summary-rank">-</span>
+                            </div>
+                            <div class="summary-stat">
+                                <span class="stat-label">Total Score</span>
+                                <span class="stat-value" id="summary-score">-</span>
+                            </div>
+                            <div class="summary-stat">
+                                <span class="stat-label">Total Spent</span>
+                                <span class="stat-value" id="summary-spent">-</span>
+                            </div>
+                            <div class="summary-stat">
+                                <span class="stat-label">Transactions</span>
+                                <span class="stat-value" id="summary-count">-</span>
+                            </div>
+                            <div class="summary-stat full-width">
+                                <span class="stat-label">Average Transaction</span>
+                                <span class="stat-value" id="summary-avg">-</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="user-summary-placeholder" class="summary-placeholder">
+                        <p>Search for a user to inspect aggregated stats, rank, and averages.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- LIVE API TERMINAL -->
+            <div class="dashboard-card terminal-card flex-grow-card">
+                <div class="card-header">
+                    <div class="header-title">
+                        <i data-lucide="terminal" class="card-icon terminal-color"></i>
+                        <h2>Live API Event Feed</h2>
+                    </div>
+                    <button id="clear-logs" class="btn-clear">Clear</button>
+                </div>
+                <div class="card-body terminal-body" id="terminal-logs">
+                    <div class="log-entry system">
+                        <span class="log-time">[00:00:00]</span> [SYSTEM] Ready. API requests will be logged here in real-time.
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="app-footer">
+        <p>Enforces DB-Level Idempotency, Mutex Transaction Locking, and abuse-resistant Rank Mechanics.</p>
+    </footer>
+
+    <script src="/static/app.js"></script>
+    <script>
+        // Initialize icons
+        lucide.createIcons();
+    </script>
+</body>
+</html>
