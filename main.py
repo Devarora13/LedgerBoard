@@ -288,3 +288,13 @@ async def read_index():
     if os.path.exists(index_path):
         return FileResponse(index_path)
     return {"message": "Welcome to Transaction Ranking API. Frontend files are missing."}
+
+
+@app.get("/admin/reset")
+def reset_db():
+    with get_db() as conn:
+        conn.execute("DELETE FROM transactions")
+        conn.execute("DELETE FROM user_summaries")
+        conn.commit()
+
+    return {"status": "reset"}

@@ -121,7 +121,7 @@ Both `/ranking` and `/summary` use **competition ranking**: users with the same 
 - **String Boundaries**: `userId` is capped at 50 characters, and `transactionId` is capped at 100 characters to prevent SQL payload abuse.
 - **Future Dates**: Transactions with timestamps dated more than 60 seconds into the future are rejected.
 - **Past Dates**: Timestamps more than 365 days in the past are rejected.
-- **Rate Limiting**: Users are capped at a maximum of **5 transactions per 10 seconds**. Requests exceeding this return a `429 Too Many Requests` error. Duplicate requests (`409`) do not count toward the limit.
+- **Rate Limiting**: Users are capped at a maximum of **5 transactions per 10 seconds**. Requests exceeding this return a `429 Too Many Requests` error. Duplicate requests are rolled back and removed from rate-limit accounting whenever possible.
 
 ---
 
